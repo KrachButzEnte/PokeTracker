@@ -1,111 +1,135 @@
-/**
- * Kleiner IndexedDB-Wrapper. Übernimmt die Rolle, die in der Android-App
- * Room + SharedPreferences hatten: Pokémon-Liste (inkl. Fang-/Shiny-Status),
- * Detail-Cache (Werte/Attacken/Entwicklung) und Fundort-Cache.
- */
-const DB_NAME = "pokedex_tracker_db";
-const DB_VERSION = 1;
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Pokedex Tracker</title>
 
-let dbPromise = null;
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#E3350D">
 
-function openDb() {
-  if (dbPromise) return dbPromise;
-  dbPromise = new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onupgradeneeded = (event) => {
-      const db = event.target.result;
-      if (!db.objectStoreNames.contains("pokemon")) {
-        db.createObjectStore("pokemon", { keyPath: "id" });
-      }
-      if (!db.objectStoreNames.contains("detail")) {
-        db.createObjectStore("detail", { keyPath: "id" });
-      }
-      if (!db.objectStoreNames.contains("encounters")) {
-        db.createObjectStore("encounters", { keyPath: "id" });
-      }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-  return dbPromise;
-}
+<!-- iOS "Add to Home Screen" Unterstützung -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Pokedex">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32">
 
-function tx(storeName, mode) {
-  return openDb().then((db) => db.transaction(storeName, mode).objectStore(storeName));
-}
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
 
-function reqToPromise(req) {
-  return new Promise((resolve, reject) => {
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
+<div id="app">
 
-const Db = {
-  async getAllPokemon() {
-    const store = await tx("pokemon", "readonly");
-    return reqToPromise(store.getAll());
-  },
+  <!-- ===================== LISTEN-ANSICHT ===================== -->
+  <div id="screen-list" class="screen active">
+    <header class="topbar" id="topbar">
+      <div class="topbar-row">
+        <button id="titleButton" class="title-button">
+          <span id="pokedexTitle">Pokedex</span>
+          <svg class="icon-edit" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+        </button>
+        <button id="refreshButton" class="icon-button" aria-label="Aktualisieren">
+          <svg class="icon-refresh" viewBox="0 0 24 24"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08a5.99 5.99 0 0 1-5.65 4c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+        </button>
+      </div>
 
-  async countPokemon() {
-    const store = await tx("pokemon", "readonly");
-    return reqToPromise(store.count());
-  },
+      <div class="progress-header" id="progressHeader">
+        <div class="progress-row">
+          <span id="progressText">0 von 0 gefangen</span>
+          <span id="progressPercent">0%</span>
+        </div>
+        <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      </div>
 
-  async putPokemonBulk(list) {
-    const store = await tx("pokemon", "readwrite");
-    return new Promise((resolve, reject) => {
-      list.forEach((p) => store.put(p));
-      store.transaction.oncomplete = () => resolve();
-      store.transaction.onerror = () => reject(store.transaction.error);
-    });
-  },
+      <div class="search-filter" id="searchFilter">
+        <div class="search-box">
+          <svg class="icon-search" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+          <input type="text" id="searchInput" placeholder="Name oder Nummer suchen">
+        </div>
+        <div class="chip-row" id="caughtFilterChips">
+          <button class="chip active" data-filter="ALL">Alle</button>
+          <button class="chip" data-filter="CAUGHT">Gefangen</button>
+          <button class="chip" data-filter="MISSING">Fehlend</button>
+        </div>
+        <div class="chip-row">
+          <button class="chip chip-wide" id="regionFilterChip">Alle Regionen</button>
+        </div>
+      </div>
+    </header>
 
-  async getPokemon(id) {
-    const store = await tx("pokemon", "readonly");
-    return reqToPromise(store.get(id));
-  },
+    <main id="listContent" class="list-content">
+      <div id="loadingState" class="center-message">
+        <div class="spinner"></div>
+        <p>Lade Pokédex …</p>
+      </div>
+      <div id="emptyState" class="center-message hidden"><p></p></div>
+      <div id="pokemonGrid" class="pokemon-grid hidden"></div>
+    </main>
 
-  async updatePokemonField(id, field, value) {
-    const store = await tx("pokemon", "readwrite");
-    const current = await reqToPromise(store.get(id));
-    if (!current) return;
-    current[field] = value;
-    return reqToPromise(store.put(current));
-  },
+    <button id="scrollTopButton" class="fab hidden" aria-label="Nach oben">
+      <svg viewBox="0 0 24 24"><path d="M12 8l-6 6 1.41 1.41L12 10.83l4.59 4.58L18 14z"/></svg>
+    </button>
+  </div>
 
-  async getDetail(id) {
-    const store = await tx("detail", "readonly");
-    return reqToPromise(store.get(id));
-  },
+  <!-- ===================== DETAIL-ANSICHT ===================== -->
+  <div id="screen-detail" class="screen">
+    <header class="topbar detail-topbar" id="detailTopbar">
+      <button id="backButton" class="icon-button" aria-label="Zurück">
+        <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20z"/></svg>
+      </button>
+      <span id="detailTitle">Pokémon</span>
+      <span class="spacer"></span>
+    </header>
 
-  async putDetail(entry) {
-    const store = await tx("detail", "readwrite");
-    return reqToPromise(store.put(entry));
-  },
+    <main id="detailContent" class="detail-content">
+      <div id="detailLoading" class="center-message">
+        <div class="spinner"></div>
+        <p>Lade Details …</p>
+      </div>
+      <div id="detailBody" class="hidden"></div>
+    </main>
+  </div>
 
-  async clearDetailCache() {
-    const store = await tx("detail", "readwrite");
-    return reqToPromise(store.clear());
-  },
+</div>
 
-  async getEncounters(id) {
-    const store = await tx("encounters", "readonly");
-    return reqToPromise(store.get(id));
-  },
+<!-- ===================== DIALOGE / SHEETS ===================== -->
+<div id="overlay" class="overlay hidden"></div>
 
-  async putEncounters(entry) {
-    const store = await tx("encounters", "readwrite");
-    return reqToPromise(store.put(entry));
-  }
-};
+<div id="trainerDialog" class="dialog hidden">
+  <h3>Trainername</h3>
+  <p class="dialog-sub">Wie heißt du als Trainer? Dein Name erscheint dann im Pokedex-Header.</p>
+  <input type="text" id="trainerNameInput" maxlength="20" placeholder="z.B. Jonas">
+  <div class="dialog-actions">
+    <button id="trainerCancel" class="btn-text">Abbrechen</button>
+    <button id="trainerSave" class="btn-text btn-primary">Speichern</button>
+  </div>
+</div>
 
-// Kleine Einstellungen (Trainername) reichen bequem in localStorage.
-const Prefs = {
-  getTrainerName() {
-    return localStorage.getItem("trainerName") || "";
-  },
-  setTrainerName(name) {
-    localStorage.setItem("trainerName", name.trim());
-  }
-};
+<div id="regionSheet" class="sheet hidden">
+  <div class="sheet-handle"></div>
+  <h3>Regionen</h3>
+  <p class="dialog-sub">Wähle aus, welche Regionen in deinem Pokedex angezeigt werden sollen.</p>
+  <div class="sheet-actions">
+    <button id="regionSelectAll" class="btn-outline">Alle wählen</button>
+    <button id="regionSelectNone" class="btn-outline">Keine wählen</button>
+  </div>
+  <div id="regionList" class="region-list"></div>
+  <button id="regionDone" class="btn-text btn-primary btn-full">Fertig</button>
+</div>
+
+<div id="gameSheet" class="dialog hidden">
+  <h3>Spiel auswählen</h3>
+  <div id="gameList" class="game-list"></div>
+  <div class="dialog-actions">
+    <button id="gameSheetClose" class="btn-text">Schließen</button>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="js/db.js"></script>
+<script src="js/api.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
