@@ -136,7 +136,7 @@ html, body {
   background: var(--surface); border-radius: var(--radius-lg);
   padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.08);
   content-visibility: auto; contain-intrinsic-size: 200px;
-  cursor: pointer;
+  cursor: pointer; min-width: 0;
 }
 .poke-card-top { display: flex; justify-content: space-between; align-items: center; }
 .poke-id { font-size: 11px; font-weight: 700; color: var(--text-muted); letter-spacing: .5px; }
@@ -147,7 +147,7 @@ html, body {
 }
 .poke-toggle.caught { background: var(--red); color: #fff; }
 .poke-toggle svg { width: 20px; height: 20px; }
-.poke-image-wrap { position: relative; aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; margin: 4px 0; }
+.poke-image-wrap { position: relative; aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; margin: 4px 0; min-width: 0; }
 .poke-image-wrap img { width: 100%; height: 100%; object-fit: contain; }
 .shiny-badge { position: absolute; top: 0; left: 0; width: 20px; height: 20px; fill: var(--gold); }
 .poke-name { text-align: center; font-size: 15px; font-weight: 600; margin-top: 2px; }
